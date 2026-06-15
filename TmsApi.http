@@ -32,3 +32,18 @@ DELETE http://localhost:5000/api/enrollments/d7927a37
 GET http://localhost:5000/api/error
 ###
 GET http://localhost:5000/scalar
+###
+POST http://localhost:5000/api/students
+Content-Type: application/json
+
+{
+  "name": "John",
+  "gpa": 3.5
+}
+###
+GET http://localhost:5000/api/students
+###
+GET http://localhost:5000/api/students/357b22ac
+###
+DELETE http://localhost:5000/api/students/357b22ac
+###

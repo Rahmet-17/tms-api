@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
+using TmsCore.Interfaces;
+using TmsCore.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,9 +12,8 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
-builder.Services.AddSingleton<EnrollmentWorker>();
 builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
-
+builder.Services.AddSingleton<IStudentService, StudentService>();
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -73,17 +74,12 @@ app.MapGet("/api/assessments/results", () => Results.Ok(new
     letterGrade = "A"
 }));
 
-app.MapGet("/api/enrollments/worker-smoke", (EnrollmentWorker worker) =>
-{
-    worker.ProcessBatch();
-    return Results.Ok("processed");
-});
 
 // Error test endpoint (used in checkpoint)
 app.MapGet("/api/error", () =>
 {
-    throw new TmsDatabaseException(
-        "Simulated database failure for ProblemDetails testing");
+    throw new Exception(
+    "Simulated database failure for ProblemDetails testing");
 });
 
 app.MapControllers();
