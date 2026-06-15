@@ -8,3 +8,27 @@ Accept: application/json
 GET {{TmsApi_HostAddress}}/api/assessments/results
 Accept: application/json
 ###
+
+
+GET {{TmsApi_HostAddress}}/api/enrollments/worker-smoke 
+Accept: application/json
+###
+GET {{TmsApi_HostAddress}}/api/enrollments/
+Accept: application/json
+###
+POST {{TmsApi_HostAddress}}/api/enrollments/
+Content-Type: application/json
+Accept: application/json
+
+{
+  "studentId": "S001",
+  "courseCode": "CS101"
+}
+###
+GET http://localhost:5000/api/enrollments/d7927a37
+###
+DELETE http://localhost:5000/api/enrollments/d7927a37
+###
+GET http://localhost:5000/api/error
+###
+GET http://localhost:5000/scalar
