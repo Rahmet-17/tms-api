@@ -47,3 +47,18 @@ GET http://localhost:5000/api/students/357b22ac
 ###
 DELETE http://localhost:5000/api/students/357b22ac
 ###
+POST http://localhost:5000/api/courses
+Content-Type: application/json
+
+{
+  "code": "CS-101",
+  "title": "Introduction to Programming",
+  "capacity": 30
+}
+###
+GET http://localhost:5000/api/courses
+###
+GET http://localhost:5000/api/courses/CS-101
+###
+DELETE http://localhost:5000/api/courses/CS-101
+###
