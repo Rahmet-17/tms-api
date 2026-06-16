@@ -1,45 +1,51 @@
 using Microsoft.AspNetCore.Mvc;
-using TmsCore.Interfaces;
-using TmsCore.Models;
+using TmsCore.Services;
 
 namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/students")]
-public class StudentsController : ControllerBase
+public class StudentsController(IStudentService studentService) : ControllerBase
 {
-    private readonly IStudentService _service;
-
-    public StudentsController(IStudentService service)
-    {
-        _service = service;
-    }
-
+    // GET: api/students
     [HttpGet]
     public async Task<IActionResult> GetAll()
-        => Ok(await _service.GetAllAsync());
+    {
+        var students = await studentService.GetAllAsync();
+        return Ok(students);
+    }
 
+    // GET: api/students/{id}
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var student = await _service.GetByIdAsync(id);
-        return student is null ? NotFound() : Ok(student);
+        var student = await studentService.GetByIdAsync(id);
+        return student is not null ? Ok(student) : NotFound();
     }
 
+    // POST: api/students
     [HttpPost]
-    public async Task<IActionResult> Create(CreateStudentRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateStudentRequest request)
     {
-        var student = await _service.CreateAsync(request.Name, request.Gpa);
+        var student = await studentService.CreateAsync(
+            request.Name,
+            request.Gpa);
 
-        return CreatedAtAction(nameof(GetById), new { id = student.Id }, student);
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = student.Id },
+            student);
     }
 
+    // DELETE: api/students/{id}
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        var result = await _service.DeleteAsync(id);
-        return result ? NoContent() : NotFound();
+        var deleted = await studentService.DeleteAsync(id);
+        return deleted ? NoContent() : NotFound();
     }
 
-    public record CreateStudentRequest(string Name, double? Gpa);
+    public record CreateStudentRequest(
+        string Name,
+        double? Gpa);
 }

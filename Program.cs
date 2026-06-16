@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
-using System.Text;
-using TmsCore.Interfaces;
+using TmsCore;
 using TmsCore.Services;
+using TmsCore.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,9 +12,12 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
-builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
-builder.Services.AddSingleton<IStudentService, StudentService>();
-builder.Services.AddSingleton<ICourseService, CourseService>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddSingleton<IAssessmentService, AssessmentService>();
+//builder.Services.AddSingleton<IStudentService, StudentService();
+
+
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -41,8 +44,8 @@ builder.Logging.AddConsole();
 var app = builder.Build();
 
 // IMPORTANT: ProblemDetails middleware FIRST
-app.UseExceptionHandler(); // ensures safe RFC 9457 responses in Production
-
+//app.UseExceptionHandler(); // ensures safe RFC 9457 responses in Production
+app.UseDeveloperExceptionPage();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

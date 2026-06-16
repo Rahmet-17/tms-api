@@ -4,12 +4,24 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="TmsCore\TmsCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="TmsCore\**\*.cs" />
   </ItemGroup>
 
 </Project>

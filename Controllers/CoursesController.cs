@@ -1,50 +1,48 @@
 using Microsoft.AspNetCore.Mvc;
-using TmsCore.Interfaces;
-
-namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/courses")]
-public class CoursesController : ControllerBase
+public class CoursesController(ICourseService courseService) : ControllerBase
 {
-    private readonly ICourseService _service;
-
-    public CoursesController(ICourseService service)
-    {
-        _service = service;
-    }
-
-    [HttpPost]
-public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
-{
-    var course = await _service.CreateAsync(
-        request.Code,
-        request.Title,
-        request.Capacity);
-
-    return Ok(course);
-}
-
-public record CreateCourseRequest(string Code, string Title, int Capacity);
-
+    // GET: api/courses
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var courses = await _service.GetAllAsync();
+        var courses = await courseService.GetAllAsync();
         return Ok(courses);
     }
 
-    [HttpGet("{code}")]
-    public async Task<IActionResult> GetById(string code)
+    // GET: api/courses/{id}
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(string id)
     {
-        var course = await _service.GetByIdAsync(code);
-        return course is null ? NotFound() : Ok(course);
+        var course = await courseService.GetByIdAsync(id);
+        return course is not null ? Ok(course) : NotFound();
     }
 
-    [HttpDelete("{code}")]
-    public async Task<IActionResult> Delete(string code)
+    // POST: api/courses
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
     {
-        var deleted = await _service.DeleteAsync(code);
+        var course = await courseService.CreateAsync(
+            request.Title,
+            request.Capacity);
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = course.Id },
+            course);
+    }
+
+    // DELETE: api/courses/{id}
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id)
+    {
+        var deleted = await courseService.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
     }
+
+    public record CreateCourseRequest(
+        string Title,
+        int Capacity);
 }
