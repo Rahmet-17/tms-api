@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TmsCore\TmsCore.csproj" />
+    <ProjectReference Include="TmsCore\TmsCore.csproj" />
   </ItemGroup>
 
 </Project>
