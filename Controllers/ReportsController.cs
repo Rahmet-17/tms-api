@@ -15,81 +15,51 @@ namespace TmsApi.Controllers
             _context = context;
         }
 
-        // 1. Active students with GPA >= 3.0
-        [HttpGet("active-count")]
-        public async Task<IActionResult> GetActiveStudentCount()
+        // Pagination (Exercise 3 - Task 1)
+        [HttpGet("students")]
+        public async Task<IActionResult> GetStudents(
+            int page = 1,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default)
         {
-            var count = await _context.Students
-                .Where(s => s.IsActive && s.GPA >= 3.0m)
-                .CountAsync();
+            var result = await _context.Students
+                .OrderBy(s => s.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
 
-            return Ok(count);
+            return Ok(result);
         }
 
-        // 2. Courses with most enrollments
-        [HttpGet("course-enrollments")]
-        public async Task<IActionResult> GetCourseEnrollments()
+        // Top 5 courses by enrollment (Exercise 3 - Task 2)
+        [HttpGet("top-courses")]
+        public async Task<IActionResult> GetTopCourses()
         {
-            var list = await _context.Courses
-                .Select(c => new
-                {
-                    c.Title,
-                    EnrollmentCount = _context.Enrollments.Count(e => e.CourseId == c.Id)
-                })
-                .OrderByDescending(x => x.EnrollmentCount)
-                .ToListAsync();
-
-            return Ok(list);
-        }
-
-        // 3. Average GPA per course
-        [HttpGet("average-gpa")]
-        public async Task<IActionResult> GetAverageGpa()
-        {
-            var list = await _context.Enrollments
+            var result = await _context.Enrollments
                 .GroupBy(e => e.Course.Title)
                 .Select(g => new
                 {
-                    Course = g.Key,
-                    AverageGPA = g.Average(e => e.Student.GPA)
+                    CourseTitle = g.Key,
+                    EnrollmentCount = g.Count()
                 })
+                .OrderByDescending(x => x.EnrollmentCount)
+                .Take(5)
                 .ToListAsync();
 
-            return Ok(list);
+            return Ok(result);
         }
+        [HttpGet("students-paged")]
+public async Task<IActionResult> GetStudentsPaged(int page = 1)
+{
+    int pageSize = 20;
 
-        // 4A. Students with no enrollments (Subquery)
-        [HttpGet("no-enrollments-a")]
-        public async Task<IActionResult> GetNoEnrollmentsA()
-        {
-            var list = await _context.Students
-                .Where(s => !_context.Enrollments.Any(e => e.StudentId == s.Id))
-                .Select(s => s.Name)
-                .ToListAsync();
+    var result = await _context.Students
+        .OrderBy(s => s.Name)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
 
-            return Ok(list);
-        }
-
-        // 4B. Students with no enrollments (LEFT JOIN style, EF-safe)
-        [HttpGet("no-enrollments-b")]
-        public async Task<IActionResult> GetNoEnrollmentsB()
-        {
-            var list = await _context.Students
-                .GroupJoin(
-                    _context.Enrollments,
-                    s => s.Id,
-                    e => e.StudentId,
-                    (s, eGroup) => new { s, eGroup }
-                )
-                .SelectMany(
-                    x => x.eGroup.DefaultIfEmpty(),
-                    (x, e) => new { x.s, e }
-                )
-                .Where(x => x.e == null)
-                .Select(x => x.s.Name)
-                .ToListAsync();
-
-            return Ok(list);
-        }
+    return Ok(result);
+}
     }
 }
