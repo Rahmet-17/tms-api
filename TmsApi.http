@@ -83,3 +83,9 @@ DELETE http://localhost:5000/api/assessments/0e01c990
 
 ###
 
+GET http://localhost:5000/api/test/deferred
+###
+ GET http://localhost:5000/api/test/translation-fail
+ ###
+ GET http://localhost:5000/api/test/active-count 
+ ###
