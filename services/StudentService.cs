@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using TmsApi.Data;
+using TmsApi.Dtos;
 using TmsApi.Entities;
 using TmsApi.Interfaces;
 
@@ -8,68 +8,73 @@ namespace TmsApi.Services;
 
 public class StudentService : IStudentService
 {
-    
-    private readonly TmsDbContext _context;
-    private readonly ILogger<StudentService> _logger;
+    private readonly TmsDbContext context;
 
-    
-
-    public StudentService(TmsDbContext context, ILogger<StudentService> logger)
+    public StudentService(TmsDbContext context)
     {
-        _context = context;
-        _logger = logger;
+        this.context = context;
     }
 
-    public async Task<Student> CreateAsync(string name, decimal? gpa)
+    public async Task<IReadOnlyList<StudentResponseDto>> GetAllAsync(
+        CancellationToken ct)
     {
-        var existing = await _context.Students
-            .FirstOrDefaultAsync(s => s.Name == name);
+        return await context.Students
+            .AsNoTracking()
+            .Select(s => new StudentResponseDto(
+                s.Id,
+                s.Name,
+                s.RegistrationNumber))
+            .ToListAsync(ct);
+    }
 
-        if (existing != null)
-        {
-            _logger.LogWarning("Duplicate student {Name}", name);
-            return existing;
-        }
+    public async Task<StudentResponseDto?> GetByIdAsync(
+        int id,
+        CancellationToken ct)
+    {
+        return await context.Students
+            .AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new StudentResponseDto(
+                s.Id,
+                s.Name,
+                s.RegistrationNumber))
+            .FirstOrDefaultAsync(ct);
+    }
 
+    public async Task<StudentResponseDto> CreateAsync(
+        CreateStudentRequest request,
+        CancellationToken ct)
+    {
         var student = new Student
         {
-            Name = name,
-            RegistrationNumber = $"STU-{Guid.NewGuid().ToString("N")[..6]}",
-            GPA = gpa ?? 0m
+            Name = request.Name,
+            RegistrationNumber = request.RegistrationNumber
         };
 
-        _context.Students.Add(student);
-        await _context.SaveChangesAsync();
+        context.Students.Add(student);
 
-        return student;
+        await context.SaveChangesAsync(ct);
+
+        return new StudentResponseDto(
+            student.Id,
+            student.Name,
+            student.RegistrationNumber);
     }
 
-    public async Task<Student?> GetByIdAsync(int id)
+    public async Task<bool> DeleteAsync(
+        int id,
+        CancellationToken ct)
     {
-        return await _context.Students
-            .FirstOrDefaultAsync(s => s.Id == id);
-    }
+        var student = await context.Students
+            .FindAsync([id], ct);
 
-    public async Task<IReadOnlyList<Student>> GetAllAsync()
-    {
-        return await _context.Students
-            .AsNoTracking()
-            .ToListAsync();
-    }
-
-    public async Task<bool> DeleteAsync(int id)
-    {
-        var student = await _context.Students
-            .FirstOrDefaultAsync(s => s.Id == id);
-
-        if (student == null)
+        if (student is null)
             return false;
 
-        _context.Students.Remove(student);
-        await _context.SaveChangesAsync();
+        context.Students.Remove(student);
+
+        await context.SaveChangesAsync(ct);
 
         return true;
     }
-
-    
 }

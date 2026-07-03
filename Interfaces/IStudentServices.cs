@@ -1,11 +1,21 @@
-using TmsApi.Entities;
+using TmsApi.Dtos;
 
 namespace TmsApi.Interfaces;
 
 public interface IStudentService
 {
-    Task<Student> CreateAsync(string name, decimal? gpa);
-    Task<Student?> GetByIdAsync(int id);
-    Task<IReadOnlyList<Student>> GetAllAsync();
-    Task<bool> DeleteAsync(int id);
+    Task<IReadOnlyList<StudentResponseDto>> GetAllAsync(
+        CancellationToken ct);
+
+    Task<StudentResponseDto?> GetByIdAsync(
+        int id,
+        CancellationToken ct);
+
+    Task<StudentResponseDto> CreateAsync(
+        CreateStudentRequest request,
+        CancellationToken ct);
+
+    Task<bool> DeleteAsync(
+        int id,
+        CancellationToken ct);
 }
