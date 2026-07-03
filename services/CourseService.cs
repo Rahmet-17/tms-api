@@ -1,105 +1,60 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using TmsApi.Data;
+using TmsApi.Dtos;
 using TmsApi.Entities;
 using TmsApi.Interfaces;
 
-namespace TmsApi.Services
+namespace TmsApi.Services;
+
+public class CourseService(
+    TmsDbContext context,
+    ILogger<CourseService> logger
+) : ICourseService
 {
-    public class CourseService : ICourseService
+    public Task<CourseResponseDto?> GetByIdAsync(
+        int id,
+        CancellationToken ct)
     {
-        private readonly TmsDbContext _context;
-        private readonly ILogger<CourseService> _logger;
+        return context.Courses
+            .AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => new CourseResponseDto(
+                c.Id,
+                c.Code,
+                c.Title,
+                c.MaxCapacity,
+                c.Enrollments.Count
+            ))
+            .FirstOrDefaultAsync(ct);
+    }
 
-        public CourseService(
-            TmsDbContext context,
-            ILogger<CourseService> logger)
+public Task<bool> CodeExistsAsync(
+    string code,
+    CancellationToken ct)
+{
+    return context.Courses
+        .AsNoTracking()
+        .AnyAsync(c => c.Code == code, ct);
+}
+    public async Task<CourseResponseDto> CreateAsync(
+        CreateCourseRequest request,
+        CancellationToken ct)
+    {
+        var course = new Course
         {
-            _context = context;
-            _logger = logger;
-        }
+            Code = request.Code,
+            Title = request.Title,
+            MaxCapacity = request.MaxCapacity
+        };
 
-        public async Task<Course> CreateAsync(
-            string code,
-            string title,
-            int capacity)
-        {
-            var existing = await _context.Courses
-                .FirstOrDefaultAsync(
-                    c => c.Code == code || c.Title == title);
+        context.Courses.Add(course);
 
-            if (existing != null)
-            {
-                _logger.LogWarning(
-                    "Duplicate course {CourseCode} or {CourseTitle} already exists",
-                    code,
-                    title);
+        await context.SaveChangesAsync(ct);
 
-                return existing;
-            }
+        logger.LogInformation(
+            "Created course {CourseId}",
+            course.Id);
 
-            var course = new Course
-            {
-                Code = code,
-                Title = title,
-                Capacity = capacity
-            };
-
-            _context.Courses.Add(course);
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Created course {CourseCode} with id {CourseId}",
-                course.Code,
-                course.Id);
-
-            return course;
-        }
-
-        public async Task<Course?> GetByIdAsync(int id)
-        {
-            var course = await _context.Courses
-                .FirstOrDefaultAsync(c => c.Id == id);
-
-            if (course == null)
-            {
-                _logger.LogWarning(
-                    "Course {CourseId} not found",
-                    id);
-            }
-
-            return course;
-        }
-
-        public async Task<IReadOnlyList<Course>> GetAllAsync()
-        {
-            return await _context.Courses.ToListAsync();
-        }
-
-        public async Task<bool> DeleteAsync(int id)
-        {
-            var course = await _context.Courses
-                .FirstOrDefaultAsync(c => c.Id == id);
-
-            if (course == null)
-            {
-                _logger.LogWarning(
-                    "Course {CourseId} not found",
-                    id);
-
-                return false;
-            }
-
-            _context.Courses.Remove(course);
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Deleted course {CourseId}",
-                id);
-
-            return true;
-        }
+        return (await GetByIdAsync(course.Id, ct))!;
     }
 }

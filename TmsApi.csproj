@@ -26,10 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="TmsCore\TmsCore.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Remove="TmsCore\**\*.cs" />
   </ItemGroup>
 

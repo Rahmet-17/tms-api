@@ -1,15 +1,18 @@
-using System.Collections.Generic;
-using TmsCore.Models;
+using TmsApi.Entities;
 
-namespace TmsCore.Interfaces;
+namespace TmsApi.Interfaces;
 
 public interface IAssessmentService
 {
-    void AddAssessment(Assessment assessment);
-    List<Assessment> GetAll();
-    Assessment? GetById(string id);
-    List<Assessment> GetByStudent(string studentId);
-    List<Assessment> GetByCourse(string courseCode);
-    decimal GetAverageScore(string studentId);
-    bool Delete(string id);
+    Task<Assessment> CreateAsync(
+        string title,
+        decimal maxScore,
+        decimal weight,
+        int courseId);
+
+    Task<Assessment?> GetByIdAsync(int id);
+
+    Task<IReadOnlyList<Assessment>> GetAllAsync();
+
+    Task<bool> DeleteAsync(int id);
 }

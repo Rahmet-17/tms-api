@@ -1,37 +1,57 @@
 using Microsoft.AspNetCore.Mvc;
-[ApiController]
-[Route("api/enrollments")]
-public class EnrollmentsController(IEnrollmentService enrollmentService) : ControllerBase
-{
-// GET/api/enrollments returns all enrollment records
-[HttpGet]
-public async Task<IActionResult> GetAll()
-{
-var enrollments = await enrollmentService.GetAllAsync();
-return Ok(enrollments);
-}
-// GET/api/enrollments/{id} returns one or 404
-[HttpGet("{id}")]
-public async Task<IActionResult> GetById(string id)
-{
-var record = await enrollmentService.GetByIdAsync(id);
-return record is not null ? Ok(record) : NotFound();
-}
-// addded in session 3
-// POST /api/enrollments creates and returns 201 with Location header
-[HttpPost]
-public async Task<IActionResult> Create([FromBody] CreateEnrollmentRequest request)
-{
-var record = await enrollmentService.EnrollAsync(request.StudentId, request.CourseCode);
-return CreatedAtAction(nameof(GetById), new { id = record.Id }, record);
-}
-public record CreateEnrollmentRequest(string StudentId, string CourseCode);
+using TmsApi.Dtos;
+using TmsApi.Interfaces;
 
-[HttpDelete("{id}")]
-public async Task<IActionResult> Delete(string id)
+namespace TmsApi.Controllers;
+
+[ApiController]
+[Route("api/courses/{courseId:int}/enrollments")]
+public class EnrollmentsController : ControllerBase
 {
-var deleted = await enrollmentService.DeleteAsync(id);
-return deleted ? NoContent() : NotFound();
+    private readonly ICourseService courseService;
+    private readonly IEnrollmentService enrollmentService;
+
+    public EnrollmentsController(
+        ICourseService courseService,
+        IEnrollmentService enrollmentService)
+    {
+        this.courseService = courseService;
+        this.enrollmentService = enrollmentService;
+    }
+
+    // GET single enrollment
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(
+        int courseId,
+        int id,
+        CancellationToken ct)
+    {
+        var record = await enrollmentService.GetByIdAsync(courseId, id, ct);
+
+        return record is not null ? Ok(record) : NotFound();
+    }
+
+    // POST enroll student
+   [HttpPost]
+public async Task<IActionResult> Create(
+    int courseId,
+    EnrollStudentRequest request,
+    CancellationToken ct)
+{
+    try
+    {
+        var result = await enrollmentService.CreateAsync(courseId, request, ct);
+        return CreatedAtAction(nameof(GetById),
+            new { courseId, id = result.Id },
+            result);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Conflict(new
+        {
+            title = "Enrollment failed",
+            detail = ex.Message
+        });
+    }
 }
 }
-public class TmsDatabaseException(string message) : Exception(message);

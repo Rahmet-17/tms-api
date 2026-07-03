@@ -1,52 +1,63 @@
-using TmsCore.Interfaces;
-using TmsCore.Models;
+using Microsoft.EntityFrameworkCore;
+using TmsApi.Data;
+using TmsApi.Entities;
+using TmsApi.Interfaces;
 
-namespace TmsCore.Services;
+namespace TmsApi.Services;
 
 public class AssessmentService : IAssessmentService
 {
-    public bool Delete(string id)
-{
-    var item = _assessments.FirstOrDefault(x => x.Id == id);
+    private readonly TmsDbContext _context;
 
-    if (item == null)
-        return false;
-
-    _assessments.Remove(item);
-    return true;
-}
-    public Assessment? GetById(string id)
-{
-    return _assessments.FirstOrDefault(x => x.Id == id);
-}
-    private readonly List<Assessment> _assessments = new();
-
-    public void AddAssessment(Assessment assessment)
+    public AssessmentService(TmsDbContext context)
     {
-        _assessments.Add(assessment);
+        _context = context;
     }
 
-    public List<Assessment> GetAll()
+    public async Task<Assessment> CreateAsync(
+        string title,
+        decimal maxScore,
+        decimal weight,
+        int courseId)
     {
-        return _assessments;
+        var assessment = new Assessment
+        {
+            Title = title,
+            MaxScore = maxScore,
+            Weight = weight,
+            CourseId = courseId
+        };
+
+        _context.Assessments.Add(assessment);
+
+        await _context.SaveChangesAsync();
+
+        return assessment;
     }
 
-    public List<Assessment> GetByStudent(string studentId)
+    public async Task<Assessment?> GetByIdAsync(int id)
     {
-        return _assessments.Where(x => x.StudentId == studentId).ToList();
+        return await _context.Assessments
+            .FirstOrDefaultAsync(a => a.Id == id);
     }
 
-    public List<Assessment> GetByCourse(string courseCode)
+    public async Task<IReadOnlyList<Assessment>> GetAllAsync()
     {
-        return _assessments.Where(x => x.CourseCode == courseCode).ToList();
+        return await _context.Assessments.ToListAsync();
     }
 
-    public decimal GetAverageScore(string studentId)
+    public async Task<bool> DeleteAsync(int id)
     {
-        var scores = _assessments
-            .Where(x => x.StudentId == studentId)
-            .Select(x => x.Score);
+        var assessment = await _context.Assessments
+            .FirstOrDefaultAsync(a => a.Id == id);
 
-        return scores.Any() ? scores.Average() : 0;
+        if (assessment == null)
+            return false;
+
+        _context.Assessments.Remove(assessment);
+
+        await _context.SaveChangesAsync();
+
+        return true;
     }
 }

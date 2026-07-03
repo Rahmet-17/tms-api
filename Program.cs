@@ -1,34 +1,35 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
-using TmsCore;
-using TmsCore.Services;
-using TmsCore.Interfaces;
+using TmsApi;
+using TmsApi.Services;
+using TmsApi.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
 using TmsApi.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// SERVICES 
+
+// SERVICES
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
-// Register TmsDbContext scoped for incoming HTTP requests
+// DbContext
 builder.Services.AddDbContext<TmsDbContext>(options =>
-options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase")));
-builder.Services.AddDbContext<TmsDbContext>(options =>
-options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
-.LogTo(Console.WriteLine, LogLevel.Information) // Log SQL to output window
-.EnableSensitiveDataLogging()); // Show parameters in querylogs (dev only)
+    options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
+           .LogTo(Console.WriteLine, LogLevel.Information)
+           .EnableSensitiveDataLogging());
 
+// Application Services
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
-builder.Services.AddSingleton<IAssessmentService, AssessmentService>();
-//builder.Services.AddSingleton<IStudentService, StudentService();
+builder.Services.AddScoped<IAssessmentService, AssessmentService>();
+builder.Services.AddScoped<IStudentService, StudentService>();
 
 
+// Authentication
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -43,20 +44,22 @@ builder.Services.AddAuthentication("Bearer")
 
 builder.Services.AddAuthorization();
 
+// Options
 builder.Services.AddOptions<PaymentOptions>()
     .BindConfiguration("Payments")
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-//  APP 
 var app = builder.Build();
 
-// IMPORTANT: ProblemDetails middleware FIRST
-//app.UseExceptionHandler(); // ensures safe RFC 9457 responses in Production
+
+// PIPELINE
 app.UseDeveloperExceptionPage();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -64,45 +67,38 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseStatusCodePages();
-
-app.UseMiddleware<RequestLoggingMiddleware>();
-
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ENDPOINTS 
+app.MapControllers();
 
-// Simple test endpoints
-app.MapGet("/weatherforecast", () => Results.Ok(new
-{
-    date = DateTime.Now,
-    temperatureC = 20,
-    summary = "Sunny"
-}));
-
-app.MapGet("/api/assessments/results", () => Results.Ok(new
-{
-    courseCode = "CS-101",
-    studentId = "S-001",
-    letterGrade = "A"
-}));
-
-
-// Error test endpoint (used in checkpoint)
-app.MapGet("/api/error", () =>
-{
-    throw new Exception(
-    "Simulated database failure for ProblemDetails testing");
-});
-//seed test data at startup
+// =====================
+// SEED DATA (FIXED SAFELY)
+// =====================
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
 
     context.Database.Migrate();
 
+
+    var report = await context.Students
+    .AsNoTracking()
+    .Select(s => new
+    {
+        s.Name,
+        EnrollmentCount = s.Enrollments.Count
+    })
+    .ToListAsync();
+
+foreach (var r in report)
+{
+    Console.WriteLine($"{r.Name}: {r.EnrollmentCount} enrollments");
+}
+
+    // 🚀 FIX: prevent duplicate seeding of EVERYTHING
     if (!context.Students.Any())
     {
         var students = new List<Student>
@@ -115,12 +111,13 @@ using (var scope = app.Services.CreateScope())
         };
 
         context.Students.AddRange(students);
+        context.SaveChanges();
 
         var courses = new List<Course>
         {
-            new() { Code = "CS-101", Title = "Introduction to Computer Science", Capacity = 30 },
-            new() { Code = "CS-201", Title = "Data Structures and Algorithms", Capacity = 25 },
-            new() { Code = "MAT-101", Title = "Calculus I", Capacity = 40 }
+            new() { Code = "CS-101", Title = "Introduction to Computer Science", MaxCapacity = 30 },
+            new() { Code = "CS-201", Title = "Data Structures and Algorithms",MaxCapacity = 25 },
+            new() { Code = "MAT-101", Title = "Calculus I", MaxCapacity = 40 }
         };
 
         context.Courses.AddRange(courses);
@@ -138,9 +135,5 @@ using (var scope = app.Services.CreateScope())
         context.SaveChanges();
     }
 }
-
-
-
-app.MapControllers();
 
 app.Run();

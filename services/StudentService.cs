@@ -1,110 +1,75 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TmsApi.Data;
+using TmsApi.Entities;
+using TmsApi.Interfaces;
 
-//
-// Contract
-//
-public interface IStudentService
-{
-    Task<StudentRecord> CreateAsync(string name, double? gpa);
-    Task<StudentRecord?> GetByIdAsync(string id);
-    Task<IReadOnlyList<StudentRecord>> GetAllAsync();
-    Task<bool> DeleteAsync(string id);
-}
+namespace TmsApi.Services;
 
-//
-// Implementation
-//
 public class StudentService : IStudentService
 {
-    private readonly Dictionary<string, StudentRecord> _store = new();
+    
+    private readonly TmsDbContext _context;
     private readonly ILogger<StudentService> _logger;
 
-    public StudentService(ILogger<StudentService> logger)
+    
+
+    public StudentService(TmsDbContext context, ILogger<StudentService> logger)
     {
+        _context = context;
         _logger = logger;
     }
 
-    public Task<StudentRecord> CreateAsync(string name, double? gpa)
+    public async Task<Student> CreateAsync(string name, decimal? gpa)
     {
-        // Duplicate check
-        var existing = _store.Values
-            .FirstOrDefault(s => s.Name == name);
+        var existing = await _context.Students
+            .FirstOrDefaultAsync(s => s.Name == name);
 
-        if (existing is not null)
+        if (existing != null)
         {
-            _logger.LogWarning(
-                "Duplicate student {StudentName} already exists (record {StudentId})",
-                name,
-                existing.Id);
-
-            return Task.FromResult(existing);
+            _logger.LogWarning("Duplicate student {Name}", name);
+            return existing;
         }
 
-        var id = Guid.NewGuid().ToString("N")[..8];
-
-        var student = new StudentRecord(
-            id,
-            name,
-            DateTime.UtcNow,
-            gpa);
-
-        _store[id] = student;
-
-        _logger.LogInformation(
-            "Created student {StudentName} with id {StudentId}",
-            name,
-            id);
-
-        return Task.FromResult(student);
-    }
-
-    public Task<StudentRecord?> GetByIdAsync(string id)
-    {
-        _store.TryGetValue(id, out var student);
-
-        if (student is null)
+        var student = new Student
         {
-            _logger.LogWarning(
-                "Student {StudentId} not found",
-                id);
-        }
+            Name = name,
+            RegistrationNumber = $"STU-{Guid.NewGuid().ToString("N")[..6]}",
+            GPA = gpa ?? 0m
+        };
 
-        return Task.FromResult(student);
+        _context.Students.Add(student);
+        await _context.SaveChangesAsync();
+
+        return student;
     }
 
-    public Task<IReadOnlyList<StudentRecord>> GetAllAsync()
+    public async Task<Student?> GetByIdAsync(int id)
     {
-        IReadOnlyList<StudentRecord> students = _store.Values.ToList();
-
-        return Task.FromResult(students);
+        return await _context.Students
+            .FirstOrDefaultAsync(s => s.Id == id);
     }
 
-    public Task<bool> DeleteAsync(string id)
+    public async Task<IReadOnlyList<Student>> GetAllAsync()
     {
-        var removed = _store.Remove(id);
-
-        if (removed)
-        {
-            _logger.LogInformation(
-                "Deleted student {StudentId}",
-                id);
-        }
-        else
-        {
-            _logger.LogWarning(
-                "Delete failed. Student {StudentId} not found",
-                id);
-        }
-
-        return Task.FromResult(removed);
+        return await _context.Students
+            .AsNoTracking()
+            .ToListAsync();
     }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var student = await _context.Students
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (student == null)
+            return false;
+
+        _context.Students.Remove(student);
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
+
+    
 }
-
-//
-// Data shape
-//
-public record StudentRecord(
-    string Id,
-    string Name,
-    DateTime EnrollmentDate,
-    double? Gpa);
