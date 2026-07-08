@@ -7,12 +7,16 @@ using TmsApi.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
 using TmsApi.Entities;
+using TmsApi.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
 
 // SERVICES
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<AuditLogFilter>();
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -135,6 +139,11 @@ foreach (var r in report)
         context.SaveChanges();
     }
 }
-
+if (app.Environment.IsDevelopment())
+{
+using var scope = app.Services.CreateScope();
+var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
+await DataSeeder.SeedAsync(context);
+}
 
 app.Run();

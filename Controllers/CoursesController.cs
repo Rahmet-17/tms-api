@@ -34,6 +34,15 @@ public class CoursesController : ControllerBase
             : NotFound();
     }
 
+
+[HttpGet]
+public async Task<IActionResult> GetCourses(
+[FromQuery] PagedRequest request, CancellationToken ct)
+{
+var result = await courseService.GetCoursesAsync(request, ct);
+return Ok(result);
+}
+
     // POST: api/courses
    [HttpPost]
 public async Task<IActionResult> Create(
