@@ -8,23 +8,62 @@ using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
 using TmsApi.Entities;
 using TmsApi.Filters;
+using Asp.Versioning;
+using TmsApi.Middleware;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
 
-// SERVICES
+// SERVICES 
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AuditLogFilter>();
 });
+
+
+// OpenAPI Documents (v1 + v2)
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.ShouldInclude = description =>
+        description.GroupName == "v1";
+});
+
+builder.Services.AddOpenApi("v2", options =>
+{
+    options.ShouldInclude = description =>
+        description.GroupName == "v2";
+});
+
+
+// API Versioning
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+
+    options.AssumeDefaultVersionWhenUnspecified = true;
+
+    options.ReportApiVersions = true;
+
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+
+    options.SubstituteApiVersionInUrl = true;
+});
+
+
 builder.Services.AddProblemDetails();
-builder.Services.AddOpenApi();
+
 
 // DbContext
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
            .LogTo(Console.WriteLine, LogLevel.Information)
            .EnableSensitiveDataLogging());
+
 
 // Application Services
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
@@ -46,7 +85,9 @@ builder.Services.AddAuthentication("Bearer")
         };
     });
 
+
 builder.Services.AddAuthorization();
+
 
 // Options
 builder.Services.AddOptions<PaymentOptions>()
@@ -54,96 +95,47 @@ builder.Services.AddOptions<PaymentOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+
 // Logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+
 
 var app = builder.Build();
 
 
 // PIPELINE
+
 app.UseDeveloperExceptionPage();
+
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    app.MapOpenApi("/openapi/{documentName}.json");
+
+    app.MapScalarApiReference(options =>
+    {
+        options
+            .WithTitle("TMS API Reference")
+            .WithTheme(ScalarTheme.DeepSpace)
+            .WithDefaultHttpClient(
+                ScalarTarget.CSharp,
+                ScalarClient.HttpClient);
+
+        options
+            .AddDocument("v1", "API Version 1.0")
+            .AddDocument("v2", "API Version 2.0");
+    });
 }
 
+
 app.UseStatusCodePages();
+
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+
 app.UseAuthorization();
-
+app.UseMiddleware<V1DeprecationMiddleware>();
 app.MapControllers();
-
-// =====================
-// SEED DATA (FIXED SAFELY)
-// =====================
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
-
-    context.Database.Migrate();
-
-
-    var report = await context.Students
-    .AsNoTracking()
-    .Select(s => new
-    {
-        s.Name,
-        EnrollmentCount = s.Enrollments.Count
-    })
-    .ToListAsync();
-
-foreach (var r in report)
-{
-    Console.WriteLine($"{r.Name}: {r.EnrollmentCount} enrollments");
-}
-
-    // 🚀 FIX: prevent duplicate seeding of EVERYTHING
-    if (!context.Students.Any())
-    {
-        var students = new List<Student>
-        {
-            new() { RegistrationNumber = "TMS-2026-0001", Name = "Alice Smith", GPA = 3.8m, IsActive = true },
-            new() { RegistrationNumber = "TMS-2026-0002", Name = "Bob Jones", GPA = 2.9m, IsActive = true },
-            new() { RegistrationNumber = "TMS-2026-0003", Name = "Charlie Brown", GPA = 3.4m, IsActive = false },
-            new() { RegistrationNumber = "TMS-2026-0004", Name = "Diana Prince", GPA = 3.9m, IsActive = true },
-            new() { RegistrationNumber = "TMS-2026-0005", Name = "Evan Wright", GPA = 2.5m, IsActive = true }
-        };
-
-        context.Students.AddRange(students);
-        context.SaveChanges();
-
-        var courses = new List<Course>
-        {
-            new() { Code = "CS-101", Title = "Introduction to Computer Science", MaxCapacity = 30 },
-            new() { Code = "CS-201", Title = "Data Structures and Algorithms",MaxCapacity = 25 },
-            new() { Code = "MAT-101", Title = "Calculus I", MaxCapacity = 40 }
-        };
-
-        context.Courses.AddRange(courses);
-        context.SaveChanges();
-
-        var enrollments = new List<Enrollment>
-        {
-            new() { StudentId = students[0].Id, CourseId = courses[0].Id, Grade = 4.0m },
-            new() { StudentId = students[0].Id, CourseId = courses[1].Id, Grade = 3.6m },
-            new() { StudentId = students[1].Id, CourseId = courses[0].Id, Grade = 2.8m },
-            new() { StudentId = students[3].Id, CourseId = courses[1].Id, Grade = 3.9m }
-        };
-
-        context.Enrollments.AddRange(enrollments);
-        context.SaveChanges();
-    }
-}
-if (app.Environment.IsDevelopment())
-{
-using var scope = app.Services.CreateScope();
-var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
-await DataSeeder.SeedAsync(context);
-}
-
 app.Run();
