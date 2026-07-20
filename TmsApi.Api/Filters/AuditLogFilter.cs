@@ -1,12 +1,10 @@
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.Extensions.Logging;
 
 namespace TmsApi.Application.Filters;
 
 public class AuditLogFilter(
     ILogger<AuditLogFilter> logger) : IActionFilter
 {
-    // Runs BEFORE controller action
     public void OnActionExecuting(
         ActionExecutingContext context)
     {
@@ -19,15 +17,22 @@ public class AuditLogFilter(
             route);
     }
 
-    // Runs AFTER controller action
+
     public void OnActionExecuted(
         ActionExecutedContext context)
     {
-        var status =
-            context.HttpContext.Response.StatusCode;
+        if (context.Exception != null)
+        {
+            logger.LogError(
+                context.Exception,
+                "TMS API failed");
+            
+            return;
+        }
+
 
         logger.LogInformation(
             "TMS API response: {StatusCode}",
-            status);
+            context.HttpContext.Response.StatusCode);
     }
 }

@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using TmsApi.Infrastructure.Persistence.Data;
-using TmsApi.Domain.Entities;
 using TmsApi.Application.Dtos;
 using TmsApi.Application.Interfaces;
-
-
+using TmsApi.Domain.Entities;
+using TmsApi.Infrastructure.Persistence.Data;
 
 namespace TmsApi.Infrastructure.Services;
 
@@ -17,9 +15,8 @@ public class EnrollmentService : IEnrollmentService
         this.context = context;
     }
 
-   
-    // GET BY ID
-   
+
+    // GET ENROLLMENT BY ID
     public async Task<EnrollmentResponseDto?> GetByIdAsync(
         int courseId,
         int id,
@@ -36,28 +33,26 @@ public class EnrollmentService : IEnrollmentService
             .FirstOrDefaultAsync(ct);
     }
 
-    
-    // CREATE ENROLLMENT
-  
+
+    // CREATE ENROLLMENT (M6)
     public async Task<EnrollmentResponseDto> CreateAsync(
         int courseId,
         EnrollStudentRequest request,
         CancellationToken ct)
     {
-        //  Get course with enrollments
         var course = await context.Courses
             .Include(c => c.Enrollments)
             .FirstOrDefaultAsync(c => c.Id == courseId, ct);
 
-        //  Course not found
+
         if (course is null)
             throw new InvalidOperationException("Course not found");
 
-        // Check capacity
+
         if (course.Enrollments.Count >= course.MaxCapacity)
             throw new InvalidOperationException("Course is full");
 
-        //  Create enrollment
+
         var enrollment = new Enrollment
         {
             CourseId = courseId,
@@ -65,10 +60,12 @@ public class EnrollmentService : IEnrollmentService
             EnrolledAt = DateTime.UtcNow
         };
 
+
         context.Enrollments.Add(enrollment);
+
         await context.SaveChangesAsync(ct);
 
-        //  Return DTO
+
         return new EnrollmentResponseDto(
             enrollment.Id,
             enrollment.CourseId,
@@ -77,8 +74,8 @@ public class EnrollmentService : IEnrollmentService
     }
 
 
-    // GET ALL (optional but needed if interface has it)
-    
+
+    // GET ALL
     public async Task<List<EnrollmentResponseDto>> GetAllAsync()
     {
         return await context.Enrollments
@@ -91,36 +88,82 @@ public class EnrollmentService : IEnrollmentService
             .ToListAsync();
     }
 
-   
+
+
     // DELETE
-   
     public async Task<bool> DeleteAsync(int id)
     {
-        var enrollment = await context.Enrollments.FindAsync(id);
+        var enrollment = await context.Enrollments
+            .FindAsync(id);
+
 
         if (enrollment is null)
             return false;
 
+
         context.Enrollments.Remove(enrollment);
+
         await context.SaveChangesAsync();
+
 
         return true;
     }
 
 
+
+    // CHECK DUPLICATE ENROLLMENT (M7 CQRS)
+    public async Task<bool> ExistsAsync(
+        int studentId,
+        string courseCode,
+        CancellationToken ct)
+    {
+        return await context.Enrollments
+            .AnyAsync(
+                e => e.StudentId == studentId &&
+                     e.Course.Code == courseCode,
+                ct);
+    }
+
+
+
+    // ADD ENROLLMENT (M7 CQRS)
+    public async Task AddAsync(
+        Enrollment enrollment,
+        CancellationToken ct)
+    {
+        context.Enrollments.Add(enrollment);
+
+        await context.SaveChangesAsync(ct);
+    }
+
+
+
+    // GET STUDENT SCHEDULE (M7 CQRS)
+    public async Task<List<Enrollment>> GetByStudentIdAsync(
+        int studentId,
+        CancellationToken ct)
+    {
+        return await context.Enrollments
+            .Include(e => e.Course)
+            .Where(e => e.StudentId == studentId)
+            .ToListAsync(ct);
+    }
+
+
+
+    // GET ENROLLMENTS BY COURSE
     public async Task<IReadOnlyList<EnrollmentResponseDto>> GetByCourseAsync(
-    int courseId,
-    CancellationToken ct)
-{
-    return await context.Enrollments
-        .AsNoTracking()
-        .Where(e => e.CourseId == courseId)
-        .Select(e => new EnrollmentResponseDto(
-            e.Id,
-            e.CourseId,
-            e.StudentId,
-            e.EnrolledAt
-        ))
-        .ToListAsync(ct);
-}
+        int courseId,
+        CancellationToken ct)
+    {
+        return await context.Enrollments
+            .AsNoTracking()
+            .Where(e => e.CourseId == courseId)
+            .Select(e => new EnrollmentResponseDto(
+                e.Id,
+                e.CourseId,
+                e.StudentId,
+                e.EnrolledAt))
+            .ToListAsync(ct);
+    }
 }

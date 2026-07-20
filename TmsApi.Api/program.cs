@@ -1,22 +1,24 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using TmsApi;
-using TmsApi.Domain.Entities;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
-using TmsApi.Infrastructure.Services;
-using TmsApi.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using TmsApi.Infrastructure.Persistence.Data;
-using TmsApi.Application.Filters;
 using Asp.Versioning;
+using FluentValidation;
+using MediatR;
+
+using TmsApi.Application.Filters;
 using TmsApi.Application.Middleware;
+using TmsApi.Application.Behaviors;
+using TmsApi.Application.Enrollments.Commands;
+using TmsApi.Api.ExceptionHandlers;
 using TmsApi.Infrastructure;
+using TmsApi.Infrastructure.Persistence.Data;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
 
-// SERVICES 
+// SERVICES
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AuditLogFilter>();
@@ -59,13 +61,13 @@ builder.Services.AddApiVersioning(options =>
 builder.Services.AddProblemDetails();
 
 
-// DbContext
+// Database
 builder.Services.AddDbContext<TmsDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-        
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 
-// Application Services
+// Infrastructure
 builder.Services.AddInfrastructure(builder.Configuration);
 
 
@@ -98,17 +100,51 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 
+// MediatR
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(
+        typeof(EnrollStudentHandler).Assembly));
+
+
+// FluentValidation
+builder.Services.AddValidatorsFromAssembly(
+    typeof(EnrollStudentValidator).Assembly);
+
+
+// Pipeline Behaviors
+builder.Services.AddTransient(
+    typeof(IPipelineBehavior<,>),
+    typeof(LoggingBehavior<,>));
+
+builder.Services.AddTransient(
+    typeof(IPipelineBehavior<,>),
+    typeof(ValidationBehavior<,>));
+
+
+// Exception Handling
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+builder.Services.AddProblemDetails();
+
+
 var app = builder.Build();
 
 
-// PIPELINE
+// Exception Handler
+app.UseExceptionHandler();
 
-app.UseDeveloperExceptionPage();
+
+// Development
+//app.UseDeveloperExceptionPage();
 
 
 if (app.Environment.IsDevelopment())
 {
+    // Generates:
+    // /openapi/v1.json
+    // /openapi/v2.json
     app.MapOpenApi("/openapi/{documentName}.json");
+
 
     app.MapScalarApiReference(options =>
     {
@@ -118,6 +154,7 @@ if (app.Environment.IsDevelopment())
             .WithDefaultHttpClient(
                 ScalarTarget.CSharp,
                 ScalarClient.HttpClient);
+
 
         options
             .AddDocument("v1", "API Version 1.0")
@@ -130,9 +167,17 @@ app.UseStatusCodePages();
 
 app.UseHttpsRedirection();
 
+
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+
+// v1 deprecation middleware
 app.UseMiddleware<V1DeprecationMiddleware>();
+
+
 app.MapControllers();
+
+
 app.Run();

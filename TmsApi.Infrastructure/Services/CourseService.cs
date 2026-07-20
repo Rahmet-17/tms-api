@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TmsApi.Infrastructure.Persistence.Data;
 using TmsApi.Application.Dtos;
-using TmsApi.Domain.Entities;
 using TmsApi.Application.Interfaces;
+using TmsApi.Domain.Entities;
+using TmsApi.Infrastructure.Persistence.Data;
 
 namespace TmsApi.Infrastructure.Services;
 
@@ -29,6 +29,7 @@ public class CourseService(
             .FirstOrDefaultAsync(ct);
     }
 
+
     // CHECK IF COURSE CODE EXISTS
     public Task<bool> CodeExistsAsync(
         string code,
@@ -38,6 +39,7 @@ public class CourseService(
             .AsNoTracking()
             .AnyAsync(c => c.Code == code, ct);
     }
+
 
     // CREATE COURSE
     public async Task<CourseResponseDto> CreateAsync(
@@ -62,16 +64,31 @@ public class CourseService(
         return (await GetByIdAsync(course.Id, ct))!;
     }
 
+
+    // GET BY COURSE CODE
+    // Used by CQRS EnrollStudentHandler
+    public async Task<Course?> GetByCodeAsync(
+        string code,
+        CancellationToken ct)
+    {
+        return await context.Courses
+            .Include(c => c.Enrollments)
+            .FirstOrDefaultAsync(
+                c => c.Code == code,
+                ct);
+    }
+
+
     // GET COURSES WITH PAGINATION + SEARCH + SORT
     public async Task<PagedResponse<CourseResponseDto>> GetCoursesAsync(
         PagedRequest request,
         CancellationToken ct)
     {
-        // Start query
         IQueryable<Course> query = context.Courses
             .AsNoTracking();
 
-        // Search
+
+        // SEARCH
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             query = query.Where(c =>
@@ -84,10 +101,12 @@ public class CourseService(
                     $"%{request.Search}%"));
         }
 
-        //Count BEFORE pagination
+
+        // TOTAL COUNT BEFORE PAGINATION
         var totalCount = await query.CountAsync(ct);
 
-        // Sorting
+
+        // SORTING
         IQueryable<Course> sortedQuery;
 
         switch (request.OrderBy)
@@ -98,11 +117,13 @@ public class CourseService(
                     : query.OrderBy(c => c.Code);
                 break;
 
+
             case "MaxCapacity":
                 sortedQuery = request.Descending
                     ? query.OrderByDescending(c => c.MaxCapacity)
                     : query.OrderBy(c => c.MaxCapacity);
                 break;
+
 
             case "Title":
             default:
@@ -112,7 +133,8 @@ public class CourseService(
                 break;
         }
 
-        // Apply pagination + DTO conversion
+
+        // PAGINATION + DTO PROJECTION
         var items = await sortedQuery
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -125,7 +147,7 @@ public class CourseService(
             ))
             .ToListAsync(ct);
 
-        //Return result
+
         return new PagedResponse<CourseResponseDto>
         {
             Items = items,

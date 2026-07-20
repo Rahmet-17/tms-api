@@ -17,5 +17,10 @@ public interface ICourseService
         string code,
         CancellationToken ct);
 
+
+         Task<Course?> GetByCodeAsync(
+        string code,
+        CancellationToken ct);
+
         Task<PagedResponse<CourseResponseDto>> GetCoursesAsync(PagedRequest request, CancellationToken ct);
 }
