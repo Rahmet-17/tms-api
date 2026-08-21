@@ -12,6 +12,7 @@ public class TmsDbContext(DbContextOptions<TmsDbContext> options)
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
     public DbSet<Assessment> Assessments { get; set; }
     public DbSet<Certificate> Certificates { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
