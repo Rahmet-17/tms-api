@@ -1,7 +1,8 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TmsApi.Infrastructure.Persistence.Data;
+using TmsApi.Application.Dtos;
+using TmsApi.Application.Interfaces;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace TmsApi.Api.Controllers.V2;
 
@@ -9,72 +10,54 @@ namespace TmsApi.Api.Controllers.V2;
 [Route("api/v{version:apiVersion}/courses")]
 [ApiVersion("2.0")]
 [ApiExplorerSettings(GroupName = "v2")]
-public class CoursesController(TmsDbContext context) : ControllerBase
+public class CoursesController(
+    ICachedCourseService cachedCourseService,
+    ICourseService courseService)
+    : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetCourses(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 50);
+        var result =
+            await cachedCourseService.GetAllCoursesAsync(ct);
 
-        var baseQuery = context.Courses.AsNoTracking();
-
-        var totalCount = await baseQuery.CountAsync(ct);
-
-        var rows = await baseQuery
-            .OrderBy(c => c.Title)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(c => new
-            {
-                c.Id,
-                c.Title,
-                c.Code,
-                c.MaxCapacity,
-                EnrollmentCount = c.Enrollments.Count
-            })
-            .ToListAsync(ct);
-
-
-        var totalPages = (int)Math.Ceiling(
-            totalCount / (double)pageSize);
-
-
-        var hasNext = page < totalPages;
-        var hasPrevious = page > 1;
-
-
-        return Ok(new
-        {
-            data = rows,
-
-            meta = new
-            {
-                totalCount,
-                page,
-                pageSize,
-                totalPages,
-                hasNext,
-                hasPrevious
-            },
-
-            links = new
-            {
-                self = $"/api/v2/courses?page={page}&pageSize={pageSize}",
-
-                next = hasNext
-                    ? $"/api/v2/courses?page={page + 1}&pageSize={pageSize}"
-                    : null,
-
-                prev = hasPrevious
-                    ? $"/api/v2/courses?page={page - 1}&pageSize={pageSize}"
-                    : null,
-
-                enroll = "/api/v2/enrollments"
-            }
-        });
+        return Ok(result);
     }
+
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdateCourse(
+        int id,
+        UpdateCourseRequest request,
+        CancellationToken ct)
+    {
+        var result =
+            await courseService.UpdateAsync(
+                id,
+                request,
+                ct);
+
+
+        if (result is null)
+            return NotFound();
+
+
+        await cachedCourseService
+            .InvalidateCourseCacheAsync(ct);
+
+
+        return Ok(result);
+    }
+
+    [HttpGet("search")]
+[EnableRateLimiting("search")]
+public IActionResult SearchCourses(
+    [FromQuery] string? term)
+{
+    return Ok(new
+    {
+        message = $"Searching courses for {term}"
+    });
+}
 }

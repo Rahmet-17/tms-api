@@ -24,17 +24,24 @@ public class EnrollmentService : IEnrollmentService
     {
         return await context.Enrollments
             .AsNoTracking()
+            .Include(e => e.Student)
+            .Include(e => e.Course)
             .Where(e => e.Id == id && e.CourseId == courseId)
             .Select(e => new EnrollmentResponseDto(
                 e.Id,
-                e.CourseId,
                 e.StudentId,
-                e.EnrolledAt))
+                e.Student.Name,
+                e.CourseId,
+                e.Course.Title,
+                e.Status,
+                e.EnrolledAt
+            ))
             .FirstOrDefaultAsync(ct);
     }
 
 
-    // CREATE ENROLLMENT (M6)
+
+    // CREATE ENROLLMENT
     public async Task<EnrollmentResponseDto> CreateAsync(
         int courseId,
         EnrollStudentRequest request,
@@ -57,7 +64,8 @@ public class EnrollmentService : IEnrollmentService
         {
             CourseId = courseId,
             StudentId = request.StudentId,
-            EnrolledAt = DateTime.UtcNow
+            EnrolledAt = DateTime.UtcNow,
+            Status = "Pending"
         };
 
 
@@ -68,29 +76,41 @@ public class EnrollmentService : IEnrollmentService
 
         return new EnrollmentResponseDto(
             enrollment.Id,
-            enrollment.CourseId,
             enrollment.StudentId,
-            enrollment.EnrolledAt);
+            "Unknown",
+            enrollment.CourseId,
+            course.Title,
+            enrollment.Status,
+            enrollment.EnrolledAt
+        );
     }
 
 
 
-    // GET ALL
-    public async Task<List<EnrollmentResponseDto>> GetAllAsync()
+    // GET ALL ENROLLMENTS
+    // Used by Angular EnrollmentStore
+    public async Task<IReadOnlyList<EnrollmentResponseDto>> GetAllAsync(
+        CancellationToken ct)
     {
         return await context.Enrollments
             .AsNoTracking()
+            .Include(e => e.Student)
+            .Include(e => e.Course)
             .Select(e => new EnrollmentResponseDto(
                 e.Id,
-                e.CourseId,
                 e.StudentId,
-                e.EnrolledAt))
-            .ToListAsync();
+                e.Student.Name,
+                e.CourseId,
+                e.Course.Title,
+                e.Status,
+                e.EnrolledAt
+            ))
+            .ToListAsync(ct);
     }
 
 
 
-    // DELETE
+    // DELETE ENROLLMENT
     public async Task<bool> DeleteAsync(int id)
     {
         var enrollment = await context.Enrollments
@@ -111,7 +131,7 @@ public class EnrollmentService : IEnrollmentService
 
 
 
-    // CHECK DUPLICATE ENROLLMENT (M7 CQRS)
+    // CHECK DUPLICATE ENROLLMENT
     public async Task<bool> ExistsAsync(
         int studentId,
         string courseCode,
@@ -126,7 +146,7 @@ public class EnrollmentService : IEnrollmentService
 
 
 
-    // ADD ENROLLMENT (M7 CQRS)
+    // ADD ENROLLMENT (CQRS)
     public async Task AddAsync(
         Enrollment enrollment,
         CancellationToken ct)
@@ -138,7 +158,7 @@ public class EnrollmentService : IEnrollmentService
 
 
 
-    // GET STUDENT SCHEDULE (M7 CQRS)
+    // GET STUDENT SCHEDULE
     public async Task<List<Enrollment>> GetByStudentIdAsync(
         int studentId,
         CancellationToken ct)
@@ -158,12 +178,53 @@ public class EnrollmentService : IEnrollmentService
     {
         return await context.Enrollments
             .AsNoTracking()
+            .Include(e => e.Student)
+            .Include(e => e.Course)
             .Where(e => e.CourseId == courseId)
             .Select(e => new EnrollmentResponseDto(
                 e.Id,
-                e.CourseId,
                 e.StudentId,
-                e.EnrolledAt))
+                e.Student.Name,
+                e.CourseId,
+                e.Course.Title,
+                e.Status,
+                e.EnrolledAt
+            ))
             .ToListAsync(ct);
     }
+
+
+    public async Task<Enrollment?> GetByIdForUpdateAsync(
+    int id,
+    CancellationToken ct)
+{
+    return await context.Enrollments
+        .FirstOrDefaultAsync(
+            e => e.Id == id,
+            ct);
+}
+
+
+public async Task UpdateAsync(
+    Enrollment enrollment,
+    CancellationToken ct)
+{
+    context.Enrollments.Update(enrollment);
+
+    await context.SaveChangesAsync(ct);
+}
+
+
+
+public async Task<Enrollment?> GetByStudentAndCourseAsync(
+    int studentId,
+    int courseId,
+    CancellationToken ct)
+{
+    return await context.Enrollments
+        .FirstOrDefaultAsync(
+            e => e.StudentId == studentId &&
+                 e.CourseId == courseId,
+            ct);
+}
 }

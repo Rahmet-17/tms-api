@@ -156,4 +156,40 @@ public class CourseService(
             PageSize = request.PageSize
         };
     }
+
+//update course
+    public async Task<CourseResponseDto?> UpdateAsync(
+    int id,
+    UpdateCourseRequest request,
+    CancellationToken ct)
+{
+    var course = await context.Courses
+        .FirstOrDefaultAsync(
+            c => c.Id == id,
+            ct);
+
+    if (course is null)
+        return null;
+
+
+    course.Title = request.Title;
+
+    if (request.MaxCapacity.HasValue)
+    {
+        course.MaxCapacity = request.MaxCapacity.Value;
+    }
+
+
+    await context.SaveChangesAsync(ct);
+
+
+    logger.LogInformation(
+        "Updated course {CourseId}",
+        course.Id);
+
+
+    return await GetByIdAsync(
+        course.Id,
+        ct);
+}
 }

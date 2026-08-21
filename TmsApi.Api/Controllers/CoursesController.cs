@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Infrastructure.Persistence.Data;
 using TmsApi.Application.Dtos;
@@ -16,9 +15,11 @@ namespace TmsApi.Api.Controllers;
     StatusCodes.Status500InternalServerError)]
 public class CoursesController(
     ICourseService courseService,
+    ICachedCourseService cachedCourseService,
     TmsDbContext context,
     LinkGenerator linkGenerator) : ControllerBase
 {
+
     // GET: api/courses/{id}
     [HttpGet("{id:int}", Name = nameof(GetCourseById))]
     [ProducesResponseType(
@@ -39,16 +40,19 @@ public class CoursesController(
         if (course is null)
             return NotFound();
 
+
         var courseUrl = linkGenerator.GetPathByName(
             HttpContext,
             nameof(GetCourseById),
             new { id });
+
 
         var enrollmentsUrl = linkGenerator.GetPathByAction(
             HttpContext,
             action: "GetEnrollments",
             controller: "Enrollments",
             values: new { courseId = id });
+
 
         var links = new List<LinkDto>
         {
@@ -58,6 +62,7 @@ public class CoursesController(
             new(enrollmentsUrl!, "enrollments", "GET")
         };
 
+
         if (course.EnrollmentCount < course.MaxCapacity)
         {
             links.Add(
@@ -66,6 +71,7 @@ public class CoursesController(
                     "enroll",
                     "POST"));
         }
+
 
         var detailDto = new CourseDetailDto
         {
@@ -77,8 +83,11 @@ public class CoursesController(
             Links = links
         };
 
+
         return Ok(detailDto);
     }
+
+
 
     // GET: api/courses
     [HttpGet]
@@ -87,14 +96,17 @@ public class CoursesController(
         StatusCodes.Status200OK)]
     [EndpointSummary("List courses with pagination")]
     [EndpointDescription(
-        "Returns a paginated, optionally filtered list of TMS courses. PageSize is capped at 50.")]
+        "Returns a cached paginated list of courses.")]
     public async Task<IActionResult> GetCourses(
-        [FromQuery] PagedRequest request,
         CancellationToken ct)
     {
-        var result = await courseService.GetCoursesAsync(request, ct);
+        var result =
+            await cachedCourseService.GetAllCoursesAsync(ct);
+
         return Ok(result);
     }
+
+
 
     // POST: api/courses
     [HttpPost]
@@ -109,14 +121,16 @@ public class CoursesController(
         StatusCodes.Status409Conflict)]
     [EndpointSummary("Create a new course")]
     [EndpointDescription(
-        "Creates a course with a unique code. Returns 409 if the course code already exists.")]
+        "Creates a course and invalidates course cache.")]
     public async Task<IActionResult> Create(
         CreateCourseRequest request,
         CancellationToken ct)
     {
+
         var exists = await courseService.CodeExistsAsync(
             request.Code,
             ct);
+
 
         if (exists)
         {
@@ -128,15 +142,26 @@ public class CoursesController(
             });
         }
 
+
         var result = await courseService.CreateAsync(
             request,
             ct);
+
+
+        // IMPORTANT:
+        // remove old cached course list after writing
+        await cachedCourseService
+            .InvalidateCourseCacheAsync(ct);
+
+
 
         return CreatedAtAction(
             nameof(GetCourseById),
             new { id = result.Id },
             result);
     }
+
+
 
     // N+1 BAD VERSION
     [HttpGet("nplus1")]
@@ -160,6 +185,8 @@ public class CoursesController(
 
         return Ok(result);
     }
+
+
 
     // N+1 FIXED VERSION
     [HttpGet("nplus1-fixed")]

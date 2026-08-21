@@ -13,6 +13,12 @@ public interface ICourseService
         CreateCourseRequest request,
         CancellationToken ct);
 
+
+        Task<CourseResponseDto?> UpdateAsync(
+    int id,
+    UpdateCourseRequest request,
+    CancellationToken ct);
+
     Task<bool> CodeExistsAsync(
         string code,
         CancellationToken ct);
