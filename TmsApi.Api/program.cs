@@ -28,16 +28,18 @@ using Microsoft.AspNetCore.Identity;
 using TmsApi.Domain.Entities;
 using System.Text;
 using TmsApi.Infrastructure.Services;
+using Microsoft.AspNetCore.Authorization;
+using TmsApi.Api.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddUserSecrets("TmsApi-Development");
 // USER SECRETS
+
+builder.Configuration.AddUserSecrets("TmsApi-Development");
 
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets<Program>();
-    
 }
 
 // TRANSCRIPT / SIGNALR
@@ -225,7 +227,16 @@ builder.Services.AddAuthentication(options =>
 
 // AUTHORIZATION
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("CanEditCourse", policy =>
+    {
+        policy.Requirements.Add(
+            new CourseInstructorRequirement());
+    });
+
+builder.Services.AddSingleton<
+    IAuthorizationHandler,
+    CourseInstructorHandler>();
 
 // CORS
 
@@ -287,7 +298,22 @@ builder.Services.AddTransient(
 
 builder.Services.AddRateLimiter(options =>
 {
-    // Global token bucket limiter
+    // AUTHENTICATION RATE LIMITER
+    // Maximum 5 login attempts per minute
+
+    options.AddFixedWindowLimiter(
+        "AuthLimiter",
+        opt =>
+        {
+            opt.PermitLimit = 5;
+
+            opt.Window =
+                TimeSpan.FromMinutes(1);
+
+            opt.QueueLimit = 0;
+        });
+
+    // GLOBAL TOKEN BUCKET LIMITER
 
     options.GlobalLimiter =
         PartitionedRateLimiter.Create<HttpContext, string>(
@@ -357,7 +383,7 @@ builder.Services.AddRateLimiter(options =>
                 };
             });
 
-    // Transcript concurrency limiter
+    // TRANSCRIPT CONCURRENCY LIMITER
 
     options.AddConcurrencyLimiter(
         "transcripts",
@@ -371,7 +397,7 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder.OldestFirst;
         });
 
-    // Search token bucket
+    // SEARCH TOKEN BUCKET
 
     options.AddTokenBucketLimiter(
         "search",
@@ -386,6 +412,8 @@ builder.Services.AddRateLimiter(options =>
 
             opt.QueueLimit = 2;
         });
+
+    // RATE LIMIT RESPONSE
 
     options.RejectionStatusCode =
         StatusCodes.Status429TooManyRequests;
@@ -452,14 +480,39 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+// EXCEPTION HANDLER
+
+app.UseExceptionHandler();
+
+// SECURITY RESPONSE HEADERS
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append(
+        "X-Content-Type-Options",
+        "nosniff");
+
+    context.Response.Headers.Append(
+        "X-Frame-Options",
+        "DENY");
+
+    context.Response.Headers.Append(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin");
+
+    // context.Response.Headers.Append(
+    //     "Content-Security-Policy",
+    //     "default-src 'self'; " +
+    //     "script-src 'self'; " +
+    //     "style-src 'self' 'unsafe-inline';");
+
+    await next();
+});
+
 // SIGNALR HUB
 
 app.MapHub<TmsHub>("/hubs/tms")
     .RequireCors("TmsClient");
-
-// EXCEPTION HANDLER
-
-app.UseExceptionHandler();
 
 // SCALAR / OPENAPI
 

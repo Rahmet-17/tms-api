@@ -2,9 +2,10 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Infrastructure.Persistence.Data;
-
+using Microsoft.AspNetCore.Authorization;
 namespace TmsApi.Api.Controllers.V1;
 
+[Authorize(Roles = "Instructor,Admin")]
 [ApiController]
 [Route("api/v{version:apiVersion}/courses")]
 [ApiVersion("1.0")]

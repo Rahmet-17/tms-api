@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using TmsApi.Infrastructure.Persistence.Data;
 using TmsApi.Application.Dtos;
 using TmsApi.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace TmsApi.Api.Controllers;
 
+[Authorize(Roles = "Instructor,Admin")]
 [ApiController]
-[Route("api/courses")]
+[Route("api/[controller]")]
 [Tags("Courses")]
 [Produces("application/json")]
 [ProducesResponseType(
@@ -17,10 +19,11 @@ public class CoursesController(
     ICourseService courseService,
     ICachedCourseService cachedCourseService,
     TmsDbContext context,
-    LinkGenerator linkGenerator) : ControllerBase
+    LinkGenerator linkGenerator,
+    IAuthorizationService authorizationService) : ControllerBase
 {
-
     // GET: api/courses/{id}
+
     [HttpGet("{id:int}", Name = nameof(GetCourseById))]
     [ProducesResponseType(
         typeof(CourseDetailDto),
@@ -40,19 +43,16 @@ public class CoursesController(
         if (course is null)
             return NotFound();
 
-
         var courseUrl = linkGenerator.GetPathByName(
             HttpContext,
             nameof(GetCourseById),
             new { id });
-
 
         var enrollmentsUrl = linkGenerator.GetPathByAction(
             HttpContext,
             action: "GetEnrollments",
             controller: "Enrollments",
             values: new { courseId = id });
-
 
         var links = new List<LinkDto>
         {
@@ -62,7 +62,6 @@ public class CoursesController(
             new(enrollmentsUrl!, "enrollments", "GET")
         };
 
-
         if (course.EnrollmentCount < course.MaxCapacity)
         {
             links.Add(
@@ -71,7 +70,6 @@ public class CoursesController(
                     "enroll",
                     "POST"));
         }
-
 
         var detailDto = new CourseDetailDto
         {
@@ -83,13 +81,12 @@ public class CoursesController(
             Links = links
         };
 
-
         return Ok(detailDto);
     }
 
 
-
     // GET: api/courses
+
     [HttpGet]
     [ProducesResponseType(
         typeof(PagedResponse<CourseResponseDto>),
@@ -107,8 +104,8 @@ public class CoursesController(
     }
 
 
-
     // POST: api/courses
+
     [HttpPost]
     [ProducesResponseType(
         typeof(CourseResponseDto),
@@ -126,34 +123,29 @@ public class CoursesController(
         CreateCourseRequest request,
         CancellationToken ct)
     {
-
-        var exists = await courseService.CodeExistsAsync(
-            request.Code,
-            ct);
-
+        var exists =
+            await courseService.CodeExistsAsync(
+                request.Code,
+                ct);
 
         if (exists)
         {
             return Conflict(new ProblemDetails
             {
                 Title = "Course code already exists",
-                Detail = $"A course with code '{request.Code}' is already registered.",
+                Detail =
+                    $"A course with code '{request.Code}' is already registered.",
                 Status = StatusCodes.Status409Conflict
             });
         }
 
+        var result =
+            await courseService.CreateAsync(
+                request,
+                ct);
 
-        var result = await courseService.CreateAsync(
-            request,
-            ct);
-
-
-        // IMPORTANT:
-        // remove old cached course list after writing
         await cachedCourseService
             .InvalidateCourseCacheAsync(ct);
-
-
 
         return CreatedAtAction(
             nameof(GetCourseById),
@@ -162,19 +154,96 @@ public class CoursesController(
     }
 
 
+    // PUT: api/courses/{id}
+    // Resource-Based Authorization
+
+    [HttpPut("{id:int}")]
+    [ProducesResponseType(
+        StatusCodes.Status204NoContent)]
+    [ProducesResponseType(
+        StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateCourse(
+        int id,
+        [FromBody] UpdateCourseRequestDto dto,
+        CancellationToken ct)
+    {
+        // Find the actual Course entity.
+        // The authorization handler needs the Course resource.
+
+        var course =
+            await context.Courses
+                .FirstOrDefaultAsync(
+                    c => c.Id == id,
+                    ct);
+
+        if (course is null)
+        {
+            return NotFound();
+        }
+
+
+        // Resource-based authorization.
+        //
+        // Admin:
+        //     Can edit any course.
+        //
+        // Instructor:
+        //     Can edit only a course where
+        //     InstructorId matches their user ID.
+
+        var authorizationResult =
+            await authorizationService.AuthorizeAsync(
+                User,
+                course,
+                "CanEditCourse");
+
+
+        if (!authorizationResult.Succeeded)
+        {
+            // Instructor does not own this course.
+            // Return 403 Forbidden.
+
+            return Forbid();
+        }
+
+
+        // User is authorized to modify the course.
+
+        course.Title = dto.Title;
+
+
+        await context.SaveChangesAsync(ct);
+
+
+        // Clear cached course data because
+        // the course has changed.
+
+        await cachedCourseService
+            .InvalidateCourseCacheAsync(ct);
+
+
+        return NoContent();
+    }
+
 
     // N+1 BAD VERSION
+
     [HttpGet("nplus1")]
     public async Task<IActionResult> NPlusOne()
     {
-        var students = await context.Students.ToListAsync();
+        var students =
+            await context.Students.ToListAsync();
 
         var result = new List<object>();
 
         foreach (var s in students)
         {
-            var count = await context.Enrollments
-                .CountAsync(e => e.StudentId == s.Id);
+            var count =
+                await context.Enrollments
+                    .CountAsync(
+                        e => e.StudentId == s.Id);
 
             result.Add(new
             {
@@ -187,19 +256,21 @@ public class CoursesController(
     }
 
 
-
     // N+1 FIXED VERSION
+
     [HttpGet("nplus1-fixed")]
     public async Task<IActionResult> NPlusOneFixed()
     {
-        var result = await context.Students
-            .AsNoTracking()
-            .Select(s => new
-            {
-                s.Name,
-                EnrollmentCount = s.Enrollments.Count
-            })
-            .ToListAsync();
+        var result =
+            await context.Students
+                .AsNoTracking()
+                .Select(s => new
+                {
+                    s.Name,
+                    EnrollmentCount =
+                        s.Enrollments.Count
+                })
+                .ToListAsync();
 
         return Ok(result);
     }

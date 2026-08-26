@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Asp.Versioning;
 using TmsApi.Domain.Entities;
 using TmsApi.Infrastructure.Persistence.Data;
@@ -77,6 +78,7 @@ public class AuthController : ControllerBase
         }
 
         // Make sure requested role exists
+
         if (!await _roleManager.RoleExistsAsync(request.Role))
         {
             await _roleManager.CreateAsync(
@@ -99,6 +101,7 @@ public class AuthController : ControllerBase
         string Email,
         string Password);
 
+    [EnableRateLimiting("AuthLimiter")]
     [HttpPost("login")]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request)
@@ -139,17 +142,21 @@ public class AuthController : ControllerBase
         }
 
         // Successful login
+
         await _userManager.ResetAccessFailedCountAsync(user);
 
         // Get user's roles
+
         var roles =
             await _userManager.GetRolesAsync(user);
 
         // Generate JWT access token
+
         var accessToken =
             _tokenService.GenerateJwt(user, roles);
 
         // Create initial refresh token
+
         var refreshToken = new RefreshToken
         {
             Token = Guid.NewGuid().ToString("N"),
@@ -170,9 +177,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    // =========================
     // REFRESH TOKEN
-    // =========================
 
     public record RefreshRequest(
         string RefreshToken);
@@ -187,6 +192,7 @@ public class AuthController : ControllerBase
                     rt => rt.Token == request.RefreshToken);
 
         // Token doesn't exist
+
         if (storedToken == null)
         {
             return Unauthorized(new
@@ -195,12 +201,12 @@ public class AuthController : ControllerBase
             });
         }
 
-        // =========================
         // TOKEN THEFT DETECTION
         // =========================
 
         // An already-used refresh token was submitted.
         // Revoke every refresh token belonging to this user.
+
         if (storedToken.IsUsed)
         {
             var userTokens =
@@ -223,9 +229,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        // =========================
         // CHECK EXPIRATION / REVOCATION
-        // =========================
 
         if (storedToken.IsRevoked ||
             storedToken.ExpiresAt < DateTime.UtcNow)
@@ -237,14 +241,16 @@ public class AuthController : ControllerBase
             });
         }
 
-        // =========================
+      
         // ROTATE TOKEN
         // =========================
 
         // Old refresh token can never be used again.
+
         storedToken.IsUsed = true;
 
         // Create completely new refresh token
+
         var newRefreshToken = new RefreshToken
         {
             Token = Guid.NewGuid().ToString("N"),
@@ -257,6 +263,7 @@ public class AuthController : ControllerBase
         _context.RefreshTokens.Add(newRefreshToken);
 
         // Get user
+
         var user =
             await _userManager.FindByIdAsync(
                 storedToken.UserId);
@@ -270,10 +277,12 @@ public class AuthController : ControllerBase
         }
 
         // Get roles
+
         var roles =
             await _userManager.GetRolesAsync(user);
 
         // Generate new access token
+
         var newAccessToken =
             _tokenService.GenerateJwt(user, roles);
 

@@ -6,6 +6,7 @@ using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Application.Enrollments.Queries;
 using TmsApi.Application.Hubs;
 using TmsApi.Api.Hubs;
+using Microsoft.AspNetCore.Authorization;
 
 namespace TmsApi.Api.Controllers;
 
@@ -14,6 +15,7 @@ namespace TmsApi.Api.Controllers;
 [Route("api/enrollments")]
 [ApiVersion("2.0")]
 [Tags("Enrollments")]
+[Authorize]
 public class EnrollmentsController(
     IMediator mediator,
     IHubContext<TmsHub, ITmsHubClient> hubContext)
