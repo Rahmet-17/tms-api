@@ -207,6 +207,7 @@ builder.Services.AddAuthentication(options =>
     options.TokenValidationParameters =
         new TokenValidationParameters
         {
+
             ValidateIssuer = true,
 
             ValidateAudience = true,
@@ -222,7 +223,29 @@ builder.Services.AddAuthentication(options =>
             IssuerSigningKey =
                 new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(jwtKey))
+
         };
+
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            // Allow JWT token to be sent via cookie for SignalR requests
+
+            var accessToken =
+                context.HttpContext.Request.Cookies["tms_auth"];
+
+            
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 // AUTHORIZATION

@@ -169,10 +169,20 @@ public class AuthController : ControllerBase
         _context.RefreshTokens.Add(refreshToken);
 
         await _context.SaveChangesAsync();
+        Response.Cookies.Append(
+                   "tms_auth",
+                   accessToken,
+                      new CookieOptions
+                      {
+                          HttpOnly = true,
+                          Secure = false, // Set to true in production
+                          SameSite = SameSiteMode.None,
 
+                          Expires = DateTime.UtcNow.AddMinutes(30)
+                      });
         return Ok(new
         {
-            accessToken,
+            accessToken = accessToken,
             refreshToken = refreshToken.Token
         });
     }
@@ -241,7 +251,7 @@ public class AuthController : ControllerBase
             });
         }
 
-      
+
         // ROTATE TOKEN
         // =========================
 
